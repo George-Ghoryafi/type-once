@@ -1,0 +1,29 @@
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface-hover: #1c2d4f;
+  --border: #2a3a5c;
+  --text: #e0e0e0;
+  --text-muted: #8892a4;
+  --accent: #7c5cfc;
+  --accent-hover: #6a4ae0;
+  --danger: #e74c5e;
+  --danger-hover: #d13a4c;
+  --radius: 8px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  width: 360px;
+  min-height: 200px;
+  overflow-x: hidden;
+}

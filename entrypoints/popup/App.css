@@ -1,0 +1,153 @@
+.app {
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #7c5cfc, #b794f6);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header .tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* Add form */
+.add-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.add-form input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.add-form input:focus {
+  border-color: var(--accent);
+}
+
+.add-form input.var-input {
+  max-width: 80px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.add-form button {
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.add-form button:hover {
+  background: var(--accent-hover);
+}
+
+.add-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Snippet list */
+.snippets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.snippet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.snippet:hover {
+  background: var(--surface-hover);
+}
+
+.snippet .var-name {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 50px;
+}
+
+.snippet .arrow {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.snippet .text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet .delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.snippet .delete-btn:hover {
+  color: var(--danger);
+  background: rgba(231, 76, 94, 0.1);
+}
+
+.empty {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.empty code {
+  background: var(--surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}

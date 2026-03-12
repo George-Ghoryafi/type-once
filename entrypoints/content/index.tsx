@@ -1,0 +1,305 @@
+// @ts-expect-error no types for textarea-caret
+import getCaretCoordinates from 'textarea-caret';
+
+interface SnippetData {
+  id: string;
+  variable: string;
+  text: string;
+}
+
+export default defineContentScript({
+  matches: ['<all_urls>'],
+
+  main() {
+    let dropdownEl: HTMLDivElement | null = null;
+    let activeTarget: HTMLElement | null = null;
+    let activeIdx = 0;
+    let snippets: SnippetData[] = [];
+
+    // ── Caret position (viewport coords) ──────────────────────────────
+    function getCaretViewportCoords(el: HTMLElement): { x: number; y: number } {
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        const pos = el.selectionStart ?? el.value.length;
+        const caret = getCaretCoordinates(el, pos); // { top, left, height }
+        const rect = el.getBoundingClientRect();
+        return {
+          x: rect.left + caret.left - el.scrollLeft,
+          y: rect.top + caret.top + caret.height - el.scrollTop,
+        };
+      }
+
+      // Contenteditable — use Selection / Range API
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0).cloneRange();
+        range.collapse(false);
+
+        // Try getClientRects first (more precise)
+        const rects = range.getClientRects();
+        if (rects.length > 0) {
+          const r = rects[rects.length - 1];
+          return { x: r.right, y: r.bottom };
+        }
+
+        // Fallback: insert a zero-width span, measure, remove
+        const span = document.createElement('span');
+        span.textContent = '\u200b'; // zero-width space
+        range.insertNode(span);
+        const spanRect = span.getBoundingClientRect();
+        const coords = { x: spanRect.left, y: spanRect.bottom };
+        span.parentNode?.removeChild(span);
+        // Clean up selection
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return coords;
+      }
+
+      // Last-resort fallback
+      const rect = el.getBoundingClientRect();
+      return { x: rect.left, y: rect.bottom };
+    }
+
+    // ── Dropdown DOM ──────────────────────────────────────────────────
+    function renderDropdown(x: number, y: number) {
+      if (dropdownEl) removeDropdown();
+
+      dropdownEl = document.createElement('div');
+      dropdownEl.id = 'typeonce-dropdown';
+      Object.assign(dropdownEl.style, {
+        position: 'fixed',
+        left: `${x}px`,
+        top: `${y + 4}px`,
+        zIndex: '2147483647',
+        background: '#1a1a2e',
+        border: '1px solid #2a3a5c',
+        borderRadius: '8px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        maxHeight: '200px',
+        overflowY: 'auto',
+        minWidth: '200px',
+        maxWidth: '340px',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        fontSize: '13px',
+        padding: '4px',
+      } as CSSStyleDeclaration);
+
+      snippets.forEach((s, i) => {
+        const item = document.createElement('div');
+        item.dataset.idx = String(i);
+        Object.assign(item.style, {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 10px',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          color: '#e0e0e0',
+          background: i === activeIdx ? '#16213e' : 'transparent',
+        } as CSSStyleDeclaration);
+
+        const varSpan = document.createElement('span');
+        Object.assign(varSpan.style, {
+          fontFamily: "'SF Mono','Fira Code',monospace",
+          fontWeight: '600',
+          color: '#7c5cfc',
+          flexShrink: '0',
+        } as CSSStyleDeclaration);
+        varSpan.textContent = s.variable;
+
+        const arrow = document.createElement('span');
+        arrow.style.color = '#8892a4';
+        arrow.style.fontSize = '11px';
+        arrow.textContent = '→';
+
+        const text = document.createElement('span');
+        Object.assign(text.style, {
+          color: '#8892a4',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          flex: '1',
+        } as CSSStyleDeclaration);
+        text.textContent = s.text;
+
+        item.append(varSpan, arrow, text);
+
+        item.addEventListener('mouseenter', () => {
+          activeIdx = i;
+          highlightActive();
+        });
+
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // keep focus on input
+          selectCurrent();
+        });
+
+        dropdownEl!.appendChild(item);
+      });
+
+      document.body.appendChild(dropdownEl);
+    }
+
+    function highlightActive() {
+      if (!dropdownEl) return;
+      const items = dropdownEl.children;
+      for (let i = 0; i < items.length; i++) {
+        (items[i] as HTMLElement).style.background =
+          i === activeIdx ? '#16213e' : 'transparent';
+      }
+      // Scroll into view
+      (items[activeIdx] as HTMLElement)?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function removeDropdown() {
+      dropdownEl?.remove();
+      dropdownEl = null;
+      activeTarget = null;
+      activeIdx = 0;
+      snippets = [];
+    }
+
+    function selectCurrent() {
+      if (!activeTarget || snippets.length === 0) return;
+      insertSnippet(activeTarget, snippets[activeIdx].text);
+      removeDropdown();
+    }
+
+    // ── Snippet insertion ─────────────────────────────────────────────
+    function insertSnippet(el: HTMLElement, text: string) {
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        const val = el.value;
+        const pos = el.selectionStart ?? val.length;
+        const triggerIdx = val.lastIndexOf('//', pos);
+        if (triggerIdx === -1) return;
+        const before = val.substring(0, triggerIdx);
+        const after = val.substring(triggerIdx + 2);
+
+        // Use native setter + InputEvent for React/framework compat
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          Object.getPrototypeOf(el),
+          'value',
+        )?.set;
+        if (nativeSetter) {
+          nativeSetter.call(el, before + text + after);
+        } else {
+          el.value = before + text + after;
+        }
+        const newPos = triggerIdx + text.length;
+        el.setSelectionRange(newPos, newPos);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        // Contenteditable
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        const node = range.startContainer;
+        if (node.nodeType !== Node.TEXT_NODE || !node.textContent) return;
+        const content = node.textContent;
+        const caretOffset = range.startOffset;
+        const triggerIdx = content.lastIndexOf('//', caretOffset);
+        if (triggerIdx === -1) return;
+        node.textContent =
+          content.substring(0, triggerIdx) + text + content.substring(triggerIdx + 2);
+        const newRange = document.createRange();
+        newRange.setStart(node, triggerIdx + text.length);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+        (node.parentElement ?? el).dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+
+    // ── Trigger detection ─────────────────────────────────────────────
+    function checkForTrigger(el: HTMLElement): boolean {
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        const pos = el.selectionStart ?? el.value.length;
+        return pos >= 2 && el.value.substring(pos - 2, pos) === '//';
+      }
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return false;
+      const range = sel.getRangeAt(0);
+      const node = range.startContainer;
+      if (node.nodeType === Node.TEXT_NODE && node.textContent) {
+        const offset = range.startOffset;
+        return offset >= 2 && node.textContent.substring(offset - 2, offset) === '//';
+      }
+      return false;
+    }
+
+    // ── Show dropdown ─────────────────────────────────────────────────
+    async function showDropdown(target: HTMLElement) {
+      if (dropdownEl) return; // already open
+      const fetched: SnippetData[] = await browser.runtime.sendMessage({
+        type: 'GET_SNIPPETS',
+      });
+      if (!fetched || fetched.length === 0) return;
+      snippets = fetched;
+      activeTarget = target;
+      activeIdx = 0;
+
+      const coords = getCaretViewportCoords(target);
+      renderDropdown(coords.x, coords.y);
+    }
+
+    // ── Global listeners ──────────────────────────────────────────────
+    document.addEventListener(
+      'input',
+      (e) => {
+        const target = e.target as HTMLElement;
+        if (!target) return;
+        const isEditable =
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target.isContentEditable;
+        if (!isEditable) return;
+
+        if (checkForTrigger(target)) {
+          showDropdown(target);
+        } else if (dropdownEl) {
+          removeDropdown();
+        }
+      },
+      true,
+    );
+
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (!dropdownEl) return;
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            e.stopPropagation();
+            activeIdx = (activeIdx + 1) % snippets.length;
+            highlightActive();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            e.stopPropagation();
+            activeIdx = (activeIdx - 1 + snippets.length) % snippets.length;
+            highlightActive();
+            break;
+          case 'Enter':
+          case 'Tab':
+            e.preventDefault();
+            e.stopPropagation();
+            selectCurrent();
+            break;
+          case 'Escape':
+            e.preventDefault();
+            e.stopPropagation();
+            removeDropdown();
+            break;
+        }
+      },
+      true,
+    );
+
+    document.addEventListener('mousedown', (e) => {
+      if (!dropdownEl) return;
+      if ((e.target as HTMLElement).closest('#typeonce-dropdown')) return;
+      removeDropdown();
+    });
+  },
+});
