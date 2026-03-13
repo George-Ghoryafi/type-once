@@ -1,4 +1,4 @@
-import { getAllSnippets, getSetting } from '../lib/db';
+import { getAllSnippets, getSetting, addClipboardItem } from '../lib/db';
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -13,6 +13,10 @@ export default defineBackground(() => {
         sendResponse(val);
       });
       return true;
+    }
+    if (message.type === 'SAVE_CLIPBOARD') {
+      addClipboardItem(message.text).catch(console.error);
+      return false; // no response needed
     }
   });
 });

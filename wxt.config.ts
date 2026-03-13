@@ -6,6 +6,6 @@ export default defineConfig({
   manifest: {
     name: 'TypeOnce',
     description: 'Save text snippets and expand them anywhere with //',
-    permissions: ['activeTab'],
+    permissions: ['activeTab', 'storage', 'clipboardRead'],
   },
 });

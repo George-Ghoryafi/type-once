@@ -103,17 +103,17 @@ export default defineContentScript({
         left: `${x}px`,
         top: `${y + 4}px`,
         zIndex: '2147483647',
-        background: '#1a1a2e',
-        border: '1px solid #2a3a5c',
-        borderRadius: '8px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
         maxHeight: `${calculatedMaxHeight}px`,
         overflowY: 'auto',
-        minWidth: '200px',
+        minWidth: '220px',
         maxWidth: '340px',
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-        fontSize: '13px',
-        padding: '4px',
+        fontFamily: "'Nunito', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        fontSize: '14px',
+        padding: '6px',
       } as CSSStyleDeclaration);
 
       filteredSnippets.forEach((s, i) => {
@@ -122,31 +122,36 @@ export default defineContentScript({
         Object.assign(item.style, {
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          padding: '8px 10px',
-          borderRadius: '6px',
+          gap: '10px',
+          padding: '10px 12px',
+          borderRadius: '8px',
           cursor: 'pointer',
-          color: '#e0e0e0',
-          background: i === activeIdx ? '#16213e' : 'transparent',
+          color: '#334155',
+          background: i === activeIdx ? '#f3e8ff' : 'transparent',
+          transition: 'background 0.15s',
         } as CSSStyleDeclaration);
 
         const varSpan = document.createElement('span');
         Object.assign(varSpan.style, {
           fontFamily: "'SF Mono','Fira Code',monospace",
-          fontWeight: '600',
-          color: '#7c5cfc',
+          fontWeight: '700',
+          color: '#8b5cf6',
           flexShrink: '0',
+          background: 'rgba(139, 92, 246, 0.1)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '12px',
         } as CSSStyleDeclaration);
         varSpan.textContent = s.variable;
 
         const arrow = document.createElement('span');
-        arrow.style.color = '#8892a4';
-        arrow.style.fontSize = '11px';
+        arrow.style.color = '#94a3b8';
+        arrow.style.fontSize = '12px';
         arrow.textContent = '→';
 
         const text = document.createElement('span');
         Object.assign(text.style, {
-          color: '#8892a4',
+          color: '#475569',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -178,7 +183,7 @@ export default defineContentScript({
       const items = dropdownEl.children;
       for (let i = 0; i < items.length; i++) {
         (items[i] as HTMLElement).style.background =
-          i === activeIdx ? '#16213e' : 'transparent';
+          i === activeIdx ? '#f3e8ff' : 'transparent';
       }
       // Scroll into view
       (items[activeIdx] as HTMLElement)?.scrollIntoView({ block: 'nearest' });
@@ -274,6 +279,17 @@ export default defineContentScript({
       }
       return null;
     }
+
+    // ── Track Clipboard History ───────────────────────────────────────
+    document.addEventListener('copy', () => {
+      const selectedText = window.getSelection()?.toString().trim();
+      if (selectedText) {
+        browser.runtime.sendMessage({
+          type: 'SAVE_CLIPBOARD',
+          text: selectedText,
+        }).catch(() => { /* ignore */ });
+      }
+    });
 
     // ── Show dropdown ─────────────────────────────────────────────────
     async function showDropdown(target: HTMLElement, query: string) {

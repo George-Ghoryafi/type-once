@@ -1,16 +1,16 @@
 :root {
-  --bg: #1a1a2e;
-  --surface: #16213e;
-  --surface-hover: #1c2d4f;
-  --border: #2a3a5c;
-  --text: #e0e0e0;
-  --text-muted: #8892a4;
-  --accent: #7c5cfc;
-  --accent-hover: #6a4ae0;
-  --danger: #e74c5e;
-  --danger-hover: #d13a4c;
-  --radius: 8px;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #334155;
+  --text-muted: #64748b;
+  --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --radius: 14px;
+  --font: 'Nunito', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 * {
