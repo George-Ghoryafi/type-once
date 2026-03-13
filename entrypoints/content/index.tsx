@@ -15,6 +15,19 @@ export default defineContentScript({
     let activeTarget: HTMLElement | null = null;
     let activeIdx = 0;
     let snippets: SnippetData[] = [];
+    let activationCommand = '//';
+
+    // Fetch initial command immediately
+    browser.runtime.sendMessage({ type: 'GET_SETTING', key: 'activationCommand', default: '//' }).then(val => {
+      if (val) activationCommand = val;
+    });
+
+    // Listen for live updates from popup
+    browser.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'SETTING_UPDATED' && msg.key === 'activationCommand') {
+        activationCommand = msg.value;
+      }
+    });
 
     // ── Caret position (viewport coords) ──────────────────────────────
     function getCaretViewportCoords(el: HTMLElement): { x: number; y: number } {
@@ -65,6 +78,11 @@ export default defineContentScript({
 
       dropdownEl = document.createElement('div');
       dropdownEl.id = 'typeonce-dropdown';
+      const margin = 10;
+      const spaceBelow = window.innerHeight - (y + 4) - margin;
+      // Provide a reasonable minimum max-height even if squeezed, fallback to 100px
+      const calculatedMaxHeight = Math.max(spaceBelow, 100);
+
       Object.assign(dropdownEl.style, {
         position: 'fixed',
         left: `${x}px`,
@@ -74,7 +92,7 @@ export default defineContentScript({
         border: '1px solid #2a3a5c',
         borderRadius: '8px',
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        maxHeight: '200px',
+        maxHeight: `${calculatedMaxHeight}px`,
         overflowY: 'auto',
         minWidth: '200px',
         maxWidth: '340px',
@@ -169,10 +187,10 @@ export default defineContentScript({
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         const val = el.value;
         const pos = el.selectionStart ?? val.length;
-        const triggerIdx = val.lastIndexOf('//', pos);
+        const triggerIdx = val.lastIndexOf(activationCommand, pos);
         if (triggerIdx === -1) return;
         const before = val.substring(0, triggerIdx);
-        const after = val.substring(triggerIdx + 2);
+        const after = val.substring(triggerIdx + activationCommand.length);
 
         // Use native setter + InputEvent for React/framework compat
         const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -197,10 +215,10 @@ export default defineContentScript({
         if (node.nodeType !== Node.TEXT_NODE || !node.textContent) return;
         const content = node.textContent;
         const caretOffset = range.startOffset;
-        const triggerIdx = content.lastIndexOf('//', caretOffset);
+        const triggerIdx = content.lastIndexOf(activationCommand, caretOffset);
         if (triggerIdx === -1) return;
         node.textContent =
-          content.substring(0, triggerIdx) + text + content.substring(triggerIdx + 2);
+          content.substring(0, triggerIdx) + text + content.substring(triggerIdx + activationCommand.length);
         const newRange = document.createRange();
         newRange.setStart(node, triggerIdx + text.length);
         newRange.collapse(true);
@@ -210,11 +228,11 @@ export default defineContentScript({
       }
     }
 
-    // ── Trigger detection ─────────────────────────────────────────────
     function checkForTrigger(el: HTMLElement): boolean {
+      const len = activationCommand.length;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         const pos = el.selectionStart ?? el.value.length;
-        return pos >= 2 && el.value.substring(pos - 2, pos) === '//';
+        return pos >= len && el.value.substring(pos - len, pos) === activationCommand;
       }
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return false;
@@ -222,7 +240,7 @@ export default defineContentScript({
       const node = range.startContainer;
       if (node.nodeType === Node.TEXT_NODE && node.textContent) {
         const offset = range.startOffset;
-        return offset >= 2 && node.textContent.substring(offset - 2, offset) === '//';
+        return offset >= len && node.textContent.substring(offset - len, offset) === activationCommand;
       }
       return false;
     }
@@ -242,7 +260,7 @@ export default defineContentScript({
       renderDropdown(coords.x, coords.y);
     }
 
-    // ── Global listeners ──────────────────────────────────────────────
+    // Listen for input events across the page
     document.addEventListener(
       'input',
       (e) => {
@@ -270,30 +288,30 @@ export default defineContentScript({
         switch (e.key) {
           case 'ArrowDown':
             e.preventDefault();
-            e.stopPropagation();
+            e.stopImmediatePropagation();
             activeIdx = (activeIdx + 1) % snippets.length;
             highlightActive();
             break;
           case 'ArrowUp':
             e.preventDefault();
-            e.stopPropagation();
+            e.stopImmediatePropagation();
             activeIdx = (activeIdx - 1 + snippets.length) % snippets.length;
             highlightActive();
             break;
           case 'Enter':
           case 'Tab':
             e.preventDefault();
-            e.stopPropagation();
+            e.stopImmediatePropagation();
             selectCurrent();
             break;
           case 'Escape':
             e.preventDefault();
-            e.stopPropagation();
+            e.stopImmediatePropagation();
             removeDropdown();
             break;
         }
       },
-      true,
+      true, // Use capture phase to intercept before target elements
     );
 
     document.addEventListener('mousedown', (e) => {

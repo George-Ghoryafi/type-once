@@ -18,12 +18,82 @@
   -webkit-text-fill-color: transparent;
 }
 
-.header .tag {
-  font-size: 10px;
-  color: var(--text-muted);
+.header .settings-toggle {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.header .settings-toggle:hover {
+  opacity: 1;
+}
+
+.settings-panel {
+  background: var(--surface);
   border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-panel label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.settings-panel input {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.settings-panel input:focus {
+  border-color: var(--accent);
+}
+
+.settings-panel input.error {
+  border-color: var(--danger);
+}
+
+.settings-panel .help-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-panel .help-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.settings-panel .refresh-warning {
+  font-size: 11px;
+  color: #ffb86c;
+  font-weight: 500;
+  background: rgba(255, 184, 108, 0.1);
+  padding: 4px 6px;
   border-radius: 4px;
-  padding: 2px 6px;
+  display: inline-block;
+  margin-top: 2px;
+}
+
+.settings-panel .error-text {
+  font-size: 11px;
+  color: var(--danger);
 }
 
 /* Add form */

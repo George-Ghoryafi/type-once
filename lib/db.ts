@@ -11,19 +11,39 @@ interface TypeOnceDB extends DBSchema {
     key: string;
     value: Snippet;
   };
+  settings: {
+    key: string;
+    value: any;
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<TypeOnceDB>> | null = null;
 
 function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB<TypeOnceDB>('type-once-db', 1, {
-      upgrade(db) {
-        db.createObjectStore('snippets', { keyPath: 'id' });
+    dbPromise = openDB<TypeOnceDB>('type-once-db', 2, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore('snippets', { keyPath: 'id' });
+        }
+        if (oldVersion < 2) {
+          db.createObjectStore('settings');
+        }
       },
     });
   }
   return dbPromise;
+}
+
+export async function getSetting<T>(key: string, defaultValue: T): Promise<T> {
+  const db = await getDB();
+  const val = await db.get('settings', key);
+  return val === undefined ? defaultValue : val;
+}
+
+export async function setSetting<T>(key: string, value: T): Promise<void> {
+  const db = await getDB();
+  await db.put('settings', value, key);
 }
 
 export async function getAllSnippets(): Promise<Snippet[]> {

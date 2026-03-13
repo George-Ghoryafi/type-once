@@ -1,14 +1,24 @@
-import { useState, useEffect } from 'react';
-import { getAllSnippets, addSnippet, deleteSnippet, type Snippet } from '../../lib/db';
+import { useState, useEffect, useRef } from 'react';
+import { getAllSnippets, addSnippet, deleteSnippet, getSetting, setSetting, type Snippet } from '../../lib/db';
 import './App.css';
+
+const VALID_ACTIVATION = /^[!@#$%&/]{1,3}$/;
 
 export default function App() {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [varName, setVarName] = useState('');
   const [text, setText] = useState('');
+  const [activation, setActivation] = useState('//');
+  const [initialActivation, setInitialActivation] = useState('//');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activationError, setActivationError] = useState('');
 
   useEffect(() => {
     getAllSnippets().then(setSnippets);
+    getSetting('activationCommand', '//').then((val) => {
+      setActivation(val);
+      setInitialActivation(val);
+    });
   }, []);
 
   const handleAdd = async () => {
@@ -28,12 +38,54 @@ export default function App() {
     if (e.key === 'Enter') handleAdd();
   };
 
+  const handleActivationChange = (val: string) => {
+    setActivation(val);
+    if (!val) {
+      setActivationError('Cannot be empty');
+    } else if (val.length > 3) {
+      setActivationError('Max 3 characters');
+    } else if (!/^[!@#\$%&\/:]+$/.test(val)) {
+      setActivationError('Only !, @, #, $, %, &, /, : allowed');
+    } else {
+      setActivationError('');
+      setSetting('activationCommand', val);
+    }
+  };
+
   return (
     <div className="app">
       <div className="header">
         <h1>TypeOnce</h1>
-        <span className="tag">// to expand</span>
+        <button 
+          className="settings-toggle" 
+          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          title="Settings"
+        >
+          ⚙️
+        </button>
       </div>
+
+      {isSettingsOpen && (
+        <div className="settings-panel">
+          <label>Activation Command</label>
+          <input 
+            className={`activation-input ${activationError ? 'error' : ''}`}
+            value={activation}
+            onChange={(e) => handleActivationChange(e.target.value)}
+            placeholder="//"
+          />
+          {activationError ? (
+            <span className="error-text">{activationError}</span>
+          ) : (
+            <div className="help-container">
+              <span className="help-text">Max 3 chars. Allowed: !, @, #, $, %, &, /, :</span>
+              {activation !== initialActivation && (
+                <span className="refresh-warning">⚠️ Refresh active tab to apply</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="add-form">
         <input
@@ -57,7 +109,7 @@ export default function App() {
       <div className="snippets">
         {snippets.length === 0 ? (
           <div className="empty">
-            No snippets yet. Add one above, then type <code>//</code> in any input to expand.
+            No snippets yet. Add one above, then type <code>{activationError ? '//' : activation}</code> in any input to expand.
           </div>
         ) : (
           snippets.map((s) => (
