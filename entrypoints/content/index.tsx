@@ -17,6 +17,8 @@ export default defineContentScript({
     let activeTarget: HTMLElement | null = null;
     let activeIdx = 0;
     let snippets: SnippetData[] = [];
+    let filteredSnippets: SnippetData[] = [];
+    let currentQuery = '';
     let activationCommand = '//';
 
     // Fetch initial command immediately
@@ -75,8 +77,15 @@ export default defineContentScript({
     }
 
     // ── Dropdown DOM ──────────────────────────────────────────────────
+    function destroyDropdownDOM() {
+      if (dropdownEl) {
+        dropdownEl.remove();
+        dropdownEl = null;
+      }
+    }
+
     function renderDropdown(x: number, y: number) {
-      if (dropdownEl) removeDropdown();
+      destroyDropdownDOM();
 
       dropdownEl = document.createElement('div');
       dropdownEl.id = 'typeonce-dropdown';
@@ -107,7 +116,7 @@ export default defineContentScript({
         padding: '4px',
       } as CSSStyleDeclaration);
 
-      snippets.forEach((s, i) => {
+      filteredSnippets.forEach((s, i) => {
         const item = document.createElement('div');
         item.dataset.idx = String(i);
         Object.assign(item.style, {
@@ -176,28 +185,30 @@ export default defineContentScript({
     }
 
     function removeDropdown() {
-      dropdownEl?.remove();
-      dropdownEl = null;
+      destroyDropdownDOM();
       activeTarget = null;
       activeIdx = 0;
       snippets = [];
+      filteredSnippets = [];
+      currentQuery = '';
     }
 
     function selectCurrent() {
-      if (!activeTarget || snippets.length === 0) return;
-      insertSnippet(activeTarget, snippets[activeIdx].text);
+      if (!activeTarget || filteredSnippets.length === 0) return;
+      insertSnippet(activeTarget, filteredSnippets[activeIdx].text, currentQuery);
       removeDropdown();
     }
 
     // ── Snippet insertion ─────────────────────────────────────────────
-    function insertSnippet(el: HTMLElement, text: string) {
+    function insertSnippet(el: HTMLElement, text: string, query: string) {
+      const lenToReplace = activationCommand.length + query.length;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         const val = el.value;
         const pos = el.selectionStart ?? val.length;
-        const triggerIdx = val.lastIndexOf(activationCommand, pos);
-        if (triggerIdx === -1) return;
+        const triggerIdx = pos - lenToReplace;
+        if (triggerIdx < 0) return;
         const before = val.substring(0, triggerIdx);
-        const after = val.substring(triggerIdx + activationCommand.length);
+        const after = val.substring(pos);
 
         // Use native setter + InputEvent for React/framework compat
         const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -221,11 +232,11 @@ export default defineContentScript({
         const node = range.startContainer;
         if (node.nodeType !== Node.TEXT_NODE || !node.textContent) return;
         const content = node.textContent;
-        const caretOffset = range.startOffset;
-        const triggerIdx = content.lastIndexOf(activationCommand, caretOffset);
-        if (triggerIdx === -1) return;
-        node.textContent =
-          content.substring(0, triggerIdx) + text + content.substring(triggerIdx + activationCommand.length);
+        const pos = range.startOffset;
+        const triggerIdx = pos - lenToReplace;
+        if (triggerIdx < 0) return;
+
+        node.textContent = content.substring(0, triggerIdx) + text + content.substring(pos);
         const newRange = document.createRange();
         newRange.setStart(node, triggerIdx + text.length);
         newRange.collapse(true);
@@ -235,33 +246,60 @@ export default defineContentScript({
       }
     }
 
-    function checkForTrigger(el: HTMLElement): boolean {
+    function getTriggerQuery(el: HTMLElement): string | null {
       const len = activationCommand.length;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        const pos = el.selectionStart ?? el.value.length;
-        return pos >= len && el.value.substring(pos - len, pos) === activationCommand;
+        const val = el.value;
+        const pos = el.selectionStart ?? val.length;
+        const textUntilCaret = val.substring(0, pos);
+        const triggerIdx = textUntilCaret.lastIndexOf(activationCommand);
+        if (triggerIdx === -1) return null;
+        const query = textUntilCaret.substring(triggerIdx + len);
+        if (/\s/.test(query)) return null;
+        return query;
       }
+      
       const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return false;
+      if (!sel || sel.rangeCount === 0) return null;
       const range = sel.getRangeAt(0);
       const node = range.startContainer;
       if (node.nodeType === Node.TEXT_NODE && node.textContent) {
         const offset = range.startOffset;
-        return offset >= len && node.textContent.substring(offset - len, offset) === activationCommand;
+        let textUntilCaret = node.textContent.substring(0, offset);
+        const triggerIdx = textUntilCaret.lastIndexOf(activationCommand);
+        if (triggerIdx === -1) return null;
+        const query = textUntilCaret.substring(triggerIdx + len);
+        if (/\s/.test(query)) return null;
+        return query;
       }
-      return false;
+      return null;
     }
 
     // ── Show dropdown ─────────────────────────────────────────────────
-    async function showDropdown(target: HTMLElement) {
-      if (dropdownEl) return; // already open
-      const fetched: SnippetData[] = await browser.runtime.sendMessage({
-        type: 'GET_SNIPPETS',
-      });
-      if (!fetched || fetched.length === 0) return;
-      snippets = fetched;
-      activeTarget = target;
-      activeIdx = 0;
+    async function showDropdown(target: HTMLElement, query: string) {
+      if (!dropdownEl) {
+        const fetched: SnippetData[] = await browser.runtime.sendMessage({
+          type: 'GET_SNIPPETS',
+        });
+        if (!fetched || fetched.length === 0) return;
+        snippets = fetched;
+        activeTarget = target;
+      }
+      
+      currentQuery = query;
+      const lowerQuery = query.toLowerCase();
+      filteredSnippets = snippets.filter(s => 
+        s.variable.toLowerCase().includes(lowerQuery) || 
+        s.text.toLowerCase().includes(lowerQuery)
+      );
+
+      if (filteredSnippets.length === 0) {
+        removeDropdown();
+        return;
+      }
+
+      activeIdx = Math.min(activeIdx, filteredSnippets.length - 1);
+      if (activeIdx < 0) activeIdx = 0;
 
       const coords = getCaretViewportCoords(target);
       renderDropdown(coords.x, coords.y);
@@ -280,8 +318,9 @@ export default defineContentScript({
           target.isContentEditable;
         if (!isEditable) return;
 
-        if (checkForTrigger(target)) {
-          showDropdown(target);
+        const query = getTriggerQuery(target);
+        if (query !== null) {
+          showDropdown(target, query);
         } else if (dropdownEl) {
           removeDropdown();
         }
@@ -297,13 +336,13 @@ export default defineContentScript({
           case 'ArrowDown':
             e.preventDefault();
             e.stopImmediatePropagation();
-            activeIdx = (activeIdx + 1) % snippets.length;
+            activeIdx = (activeIdx + 1) % filteredSnippets.length;
             highlightActive();
             break;
           case 'ArrowUp':
             e.preventDefault();
             e.stopImmediatePropagation();
-            activeIdx = (activeIdx - 1 + snippets.length) % snippets.length;
+            activeIdx = (activeIdx - 1 + filteredSnippets.length) % filteredSnippets.length;
             highlightActive();
             break;
           case 'Enter':
