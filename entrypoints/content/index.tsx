@@ -9,6 +9,8 @@ interface SnippetData {
 
 export default defineContentScript({
   matches: ['<all_urls>'],
+  allFrames: true,
+  runAt: 'document_idle',
 
   main() {
     let dropdownEl: HTMLDivElement | null = null;
@@ -78,6 +80,10 @@ export default defineContentScript({
 
       dropdownEl = document.createElement('div');
       dropdownEl.id = 'typeonce-dropdown';
+      // Use the HTML popover API to push this element into the Top Layer 
+      // (above all <dialog> modals and maximum z-indices)
+      dropdownEl.popover = 'manual';
+      
       const margin = 10;
       const spaceBelow = window.innerHeight - (y + 4) - margin;
       // Provide a reasonable minimum max-height even if squeezed, fallback to 100px
@@ -155,6 +161,7 @@ export default defineContentScript({
       });
 
       document.body.appendChild(dropdownEl);
+      dropdownEl.showPopover();
     }
 
     function highlightActive() {
@@ -264,7 +271,8 @@ export default defineContentScript({
     document.addEventListener(
       'input',
       (e) => {
-        const target = e.target as HTMLElement;
+        // Use composedPath to pierce open Shadow DOMs (e.g. Web Components)
+        const target = (e.composedPath?.()[0] || e.target) as HTMLElement;
         if (!target) return;
         const isEditable =
           target instanceof HTMLInputElement ||

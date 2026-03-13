@@ -112,6 +112,18 @@ If we wanted to respect the website's intentions, we could modify our insertion 
 
 Therefore, keeping the current direct value-setter approach is the recommended best practice for browser extensions, even if it happens to bypass page-level `paste` event listeners.
 
+## Edge Case Analysis: Modern Modals and Shadow DOMs
+
+Complex web apps like LinkedIn often use highly advanced techniques to render "modals" (like the Easy Apply dialog). These techniques break traditional CSS layering and DOM event bubbling:
+
+1. **The Top Layer Problem**: Modern dialogs often use the HTML5 `<dialog>` element and call `dialog.showModal()`. The browser places these elements into a special rendering context called the **Top Layer**. The Top Layer sits visibly above _everything_ else on the page, regardless of `z-index`. Even our `z-index: 2147483647` dropdown would render underneath the modal's backdrop, rendering it completely invisible and unclickable.
+2. **The Shadow DOM Problem**: Modals or specific custom input components are often encapsulated inside an open "Shadow DOM" to prevent CSS leakage. When a user types inside a Shadow DOM, the `input` event bubbles up to the main document, but the browser "retargets" the event. The `e.target` becomes the shadow host (the wrapper element), not the actual `<input>` field, causing our `isEditable` detection to fail.
+
+**How does TypeOnce solve this?**
+
+1. **The Popover API:** Instead of fighting `z-index` wars against the Top Layer, we promote our dropdown into the Top Layer alongside the modal. By setting `dropdownEl.popover = "manual"` and calling `dropdownEl.showPopover()`, the browser guarantees our dropdown renders at the absolute highest physical layer of the screen, effortlessly floating above any native `<dialog>`. 
+2. **Composed Paths:** In our global event listener, we look at where the event _actually_ originated before it bubbled out of any Shadow DOMs. By using `const target = e.composedPath()[0]`, we pierce through the open shadow root and correctly identify the hidden `<input>` or `contenteditable` node nested inside.
+
 ## Summary
 
-By combining the Mirror Div technique for native inputs, the Selection/Range API for modern rich-text editors, direct body-injection for reliable CSS positioning, and prototype-hacking for React compatibility, we've built an extremely robust, site-agnostic text replacement engine.
+By combining the Mirror Div technique for native inputs, the Selection/Range API for modern rich-text editors, direct body-injection alongside the native `popover` API for reliable Top Layer positioning, and prototype-hacking for React compatibility, we've built an extremely robust, site-agnostic text replacement engine.
